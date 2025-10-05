@@ -13,14 +13,22 @@ enum Role {
 }
 
 model User {
-  id           String       @id @default(cuid())
-  email        String       @unique
+  id           String              @id @default(cuid())
+  email        String              @unique
   name         String
   passwordHash String
-  role         Role         @default(STUDENT)
-  createdAt    DateTime     @default(now())
+  role         Role                @default(STUDENT)
+  createdAt    DateTime            @default(now())
   submissions  Submission[]
-  quizzes      Quiz[]       @relation("QuizAuthor")
+  quizzes      Quiz[]              @relation("QuizAuthor")
+  codes        StudentAccessCode[]
+}
+
+model Category {
+  id        String     @id @default(cuid())
+  name      String     @unique
+  createdAt DateTime   @default(now())
+  questions Question[]
 }
 
 model Quiz {
@@ -37,13 +45,15 @@ model Quiz {
 }
 
 model Question {
-  id      String   @id @default(cuid())
-  quizId  String
-  quiz    Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
-  text    String
-  options Option[]
-  // 🔽 역방향 추가
-  answers Answer[]
+  id          String    @id @default(cuid())
+  quizId      String
+  quiz        Quiz      @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  text        String
+  explanation String?
+  categoryId  String?
+  category    Category? @relation(fields: [categoryId], references: [id])
+  options     Option[]
+  answers     Answer[]
 }
 
 model Option {
@@ -52,7 +62,6 @@ model Option {
   question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
   text       String
   isCorrect  Boolean  @default(false)
-  // 🔽 역방향 추가
   answers    Answer[]
 }
 
@@ -75,4 +84,14 @@ model Answer {
   question     Question   @relation(fields: [questionId], references: [id])
   optionId     String
   option       Option     @relation(fields: [optionId], references: [id])
+}
+
+model StudentAccessCode {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  expiresAt   DateTime
+  studentName String?
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  createdAt   DateTime @default(now())
 }
