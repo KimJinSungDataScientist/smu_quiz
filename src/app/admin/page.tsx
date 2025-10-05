@@ -10,10 +10,17 @@ export default function AdminHome(){
           <div className="font-semibold">학생 코드 발급/관리</div>
           <div className="text-sm text-gray-600 mt-1">코드 생성, 유효기간 설정, 삭제(회수)</div>
         </Link>
+
+        <Link href="/admin/quizzes" className="block p-4 rounded-2xl shadow bg-white hover:bg-gray-50">
+          <div className="font-semibold">퀴즈 관리 / CSV 업로드</div>
+          <div className="text-sm text-gray-600 mt-1">퀴즈 생성·삭제, CSV로 문항 업데이트</div>
+        </Link>
+
         <Link href="/admin/submissions" className="block p-4 rounded-2xl shadow bg-white hover:bg-gray-50">
           <div className="font-semibold">성적 보기</div>
           <div className="text-sm text-gray-600 mt-1">학생 제출 내역 및 점수</div>
         </Link>
+
         <Link href="/categories" className="block p-4 rounded-2xl shadow bg-white hover:bg-gray-50">
           <div className="font-semibold">카테고리로 풀기</div>
           <div className="text-sm text-gray-600 mt-1">학생용 진입</div>

@@ -1,99 +1,87 @@
 'use client'
 import useSWR from 'swr'
+import { useParams } from 'next/navigation'
 import { useState } from 'react'
-const fetcher = (u:string)=>fetch(u).then(r=>r.json())
+const fetcher=(u:string)=>fetch(u).then(r=>r.json())
 
-export default function Codes(){
-  const { data, mutate } = useSWR('/api/admin/codes', fetcher)
+export default function AdminQuizEdit(){
+  const { id } = useParams<{id:string}>()
+  const { data, mutate } = useSWR(`/api/quizzes/${id}`, fetcher)
+  const [csvText, setCsvText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string|null>(null)
+  const [err, setErr] = useState<string|null>(null)
 
-  // 기존: 코드 단독 발급
-  const [name,setName]=useState('')
-  const [days,setDays]=useState(7)
-
-  // 신규: 학생 계정 + 코드 한번에
-  const [sName,setSName]=useState('')
-  const [sEmail,setSEmail]=useState('')
-  const [sDays,setSDays]=useState(7)
-  const [createdInfo,setCreatedInfo]=useState<any>(null)
-
-  const issue=async()=>{
-    const res=await fetch('/api/admin/codes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({studentName:name, daysValid:days})})
-    if(res.ok){ setName(''); setDays(7); mutate() } else alert('발급 실패')
+  const onFile = async (f?: File)=>{
+    if(!f) return
+    const text = await f.text()
+    setCsvText(text)
   }
-  const del=async(id:string)=>{
-    if(!confirm('정말 삭제(회수)할까요?')) return
-    const res=await fetch(`/api/admin/codes/${id}`,{method:'DELETE'})
-    if(res.ok) mutate(); else alert('삭제 실패')
-  }
-  const copy=(t:string)=>navigator.clipboard.writeText(t).then(()=>alert('복사됨'))
 
-  const createStudentAndCode = async()=>{
-    const res = await fetch('/api/admin/students',{
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ name: sName, email: sEmail, daysValid: sDays })
-    })
-    if(res.ok){
-      const j = await res.json()
-      setCreatedInfo(j)
-      setSName(''); setSEmail(''); setSDays(7)
-      mutate()
-    } else {
-      const t = await res.text(); alert('생성 실패: ' + t)
+  const upload = async ()=>{
+    if(!csvText.trim()) { alert('CSV 내용이 비어있습니다.'); return }
+    setBusy(true); setMsg(null); setErr(null)
+    try{
+      const res = await fetch(`/api/quizzes/${id}/upload-csv`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+        body: csvText
+      })
+      const bodyText = await res.text()
+      let j:any = null
+      try{ j = JSON.parse(bodyText) } catch {}
+      if(!res.ok){
+        const detail = j?.detail || bodyText || 'UNKNOWN'
+        throw new Error(detail)
+      }
+      setMsg('업로드 완료! 문항/카테고리가 갱신되었습니다.')
+      await mutate()
+    }catch(e:any){
+      setErr('업로드 실패: ' + (e?.message || e))
+    }finally{
+      setBusy(false)
     }
   }
 
   return (
-    <div className="space-y-6">
-      {/* 학생 계정 + 코드 한번에 */}
-      <div className="card space-y-2">
-        <h2 className="font-semibold">학생 계정 + 코드 생성</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <input className="input" placeholder="이름(선택)" value={sName} onChange={e=>setSName(e.target.value)} />
-          <input className="input" placeholder="이메일(선택)" value={sEmail} onChange={e=>setSEmail(e.target.value)} />
-          <input className="input" type="number" min={1} value={sDays} onChange={e=>setSDays(Number(e.target.value))} placeholder="유효기간(일)"/>
+    <div className="space-y-4">
+      <h1 className="text-xl font-bold">퀴즈 CSV 업로드</h1>
+      {data ? (
+        <div className="text-sm text-gray-600">
+          <div>퀴즈: <b>{data.title}</b></div>
+          <div>현재 문항 수: {data.questions?.length ?? 0}</div>
         </div>
-        <button className="btn-primary" onClick={createStudentAndCode}>생성</button>
-        {createdInfo && (
-          <div className="text-sm text-green-700">
-            생성 완료: {createdInfo.user.email} / 코드 <b className="font-mono">{createdInfo.code}</b> (만료 {new Date(createdInfo.expiresAt).toLocaleDateString()})
-          </div>
-        )}
+      ) : <div className="text-sm text-gray-500">퀴즈 정보를 불러오는 중...</div>}
+
+      <div className="card space-y-3">
+        <div className="text-sm">CSV 업로드 (.csv / 엑셀에서 복붙도 가능)</div>
+        <input type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" onChange={e=>onFile(e.target.files?.[0])} />
+        <textarea
+          className="w-full h-56 border rounded-xl p-3 font-mono text-sm"
+          value={csvText}
+          onChange={e=>setCsvText(e.target.value)}
+          placeholder="category,question,answer,explanation ... 또는 탭/세미콜론 구분도 가능"
+        />
+        <div className="flex gap-2 items-center">
+          <button className="btn-primary" disabled={busy} onClick={upload}>{busy?'업로드 중...':'업로드'}</button>
+          {msg && <div className="text-sm text-green-700">{msg}</div>}
+          {err && <div className="text-sm text-red-600">{err}</div>}
+        </div>
+        <div className="text-xs text-gray-500">
+          포맷: <code>category,question,answer(O/X),explanation</code> — 엑셀에서 그대로 붙여넣기(탭)도 지원합니다.
+        </div>
       </div>
 
-      {/* 기존: 코드만 발급 */}
-      <div className="card space-y-2">
-        <h2 className="font-semibold">학생 코드 발급(기존)</h2>
-        <label className="label">학생 이름(선택)</label>
-        <input className="input" value={name} onChange={e=>setName(e.target.value)} placeholder="홍길동"/>
-        <label className="label">유효기간(일)</label>
-        <input className="input" type="number" min={1} value={days} onChange={e=>setDays(Number(e.target.value))}/>
-        <button className="btn-primary" onClick={issue}>발급</button>
-      </div>
-
-      {/* 목록 + 삭제 */}
-      <div className="card">
-        <h3 className="font-semibold mb-2">발급 내역</h3>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead><tr className="text-left">
-              <th className="p-2">코드</th><th className="p-2">학생명</th><th className="p-2">만료</th>
-              <th className="p-2">바인딩 사용자</th><th className="p-2">복사</th><th className="p-2">삭제</th>
-            </tr></thead>
-            <tbody>
-            {data?.map((r:any)=>(
-              <tr key={r.id} className="border-t">
-                <td className="p-2 font-mono">{r.code}</td>
-                <td className="p-2">{r.studentName||'-'}</td>
-                <td className="p-2">{new Date(r.expiresAt).toLocaleDateString()}</td>
-                <td className="p-2">{r.userId? '사용중':'-'}</td>
-                <td className="p-2"><button className="btn" onClick={()=>copy(r.code)}>복사</button></td>
-                <td className="p-2"><button className="btn" onClick={()=>del(r.id)}>삭제</button></td>
-              </tr>
+      {data?.questions?.length ? (
+        <div className="card">
+          <div className="font-semibold mb-2">미리보기(상위 10개)</div>
+          <ul className="text-sm space-y-1 max-h-64 overflow-auto">
+            {data.questions.slice(0,10).map((q:any)=>(
+              <li key={q.id}>• {q.text} <span className="text-gray-500">/ 카테고리: {q.category?.name ?? '-'}</span></li>
             ))}
-            </tbody>
-          </table>
+          </ul>
         </div>
-      </div>
+      ) : null}
     </div>
   )
 }
