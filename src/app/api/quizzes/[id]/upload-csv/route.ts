@@ -1,31 +1,57 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth'
-import { parseCategoryCSV } from '@/utils/csv'
+import { parseQuizCSV } from '@/utils/csv'
 
-export async function POST(req: Request, { params }: { params: { id: string }}){
+export async function POST(req: Request, { params }: { params: { id: string }}) {
   const s = getSession()
-  if(!s || s.role !== 'ADMIN') return NextResponse.json({ error:'ADMIN_ONLY' }, { status: 403 })
-  const text = await req.text()
-  const items = parseCategoryCSV(text)
-
-  const byCat = new Map<string, any[]>()
-  items.forEach(i=>{ const arr = byCat.get(i.category) || []; arr.push(i); byCat.set(i.category, arr) })
-
-  for(const [catName, arr] of byCat){
-    const cat = await prisma.category.upsert({ where: { name: catName }, update: {}, create: { name: catName } })
-    await prisma.question.deleteMany({ where: { quizId: params.id, categoryId: cat.id } })
-    for(const r of arr){
-      await prisma.question.create({ data: {
-        quizId: params.id,
-        categoryId: cat.id,
-        text: r.text,
-        explanation: r.explanation || null,
-        options: { create: [{ text:'O', isCorrect: !!r.correctIsO }, { text:'X', isCorrect: !r.correctIsO }] }
-      }})
-    }
+  if (!s || s.role !== 'ADMIN') {
+    return NextResponse.json({ error: 'ADMIN_ONLY' }, { status: 403 })
   }
 
-  const updated = await prisma.quiz.findUnique({ where: { id: params.id }, include: { questions: { include: { options: true } } } })
+  const text = await req.text()
+  const rows = parseQuizCSV(text) as {
+    category: string
+    text: string
+    explanation?: string
+    correctIsO: boolean
+  }[]
+
+  await prisma.$transaction(async (tx) => {
+    await tx.answer.deleteMany({ where: { question: { quizId: params.id } } }).catch(() => {})
+    await tx.question.deleteMany({ where: { quizId: params.id } })
+
+    for (const q of rows) {
+      let categoryId: string | undefined
+      if (q.category && q.category.trim().length > 0) {
+        const cat = await tx.category.upsert({
+          where: { name: q.category.trim() },
+          update: {},
+          create: { name: q.category.trim() },
+        })
+        categoryId = cat.id
+      }
+
+      await tx.question.create({
+        data: {
+          quizId: params.id,
+          text: q.text,
+          explanation: q.explanation || null,
+          ...(categoryId ? { categoryId } : {}),
+          options: {
+            create: [
+              { text: 'O', isCorrect: q.correctIsO },
+              { text: 'X', isCorrect: !q.correctIsO },
+            ],
+          },
+        },
+      })
+    }
+  })
+
+  const updated = await prisma.quiz.findUnique({
+    where: { id: params.id },
+    include: { questions: { include: { options: true } } },
+  })
   return NextResponse.json(updated)
 }

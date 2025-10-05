@@ -1,12 +1,12 @@
 'use client'
 import useSWR from 'swr'
 import { useState } from 'react'
-const fetcher = (u:string)=>fetch(u).then(r=>r.json())
+const fetcher=(u:string)=>fetch(u).then(r=>r.json())
 
 export default function Codes(){
   const { data, mutate } = useSWR('/api/admin/codes', fetcher)
 
-  // 기존: 코드 단독 발급
+  // 기존: 코드만 발급
   const [name,setName]=useState('')
   const [days,setDays]=useState(7)
 
